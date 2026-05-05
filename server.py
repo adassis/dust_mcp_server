@@ -1,95 +1,71 @@
 # =============================================================
 # server.py — Point d'entrée du serveur MCP Dust
 # =============================================================
-# Pour ajouter un nouvel outil à l'avenir :
+# Pour ajouter un nouvel outil :
 #   1. Créer tools/mon_outil.py avec une fonction register(mcp)
 #   2. Ajouter import + register() ci-dessous
 # =============================================================
 
-import uvicorn  # Le serveur web ASGI qui fait tourner l'app
-
-# FastMCP : le framework qui crée le serveur MCP
+import uvicorn
 from mcp.server.fastmcp import FastMCP
-
-# Pour créer le middleware d'authentification
 from starlette.middleware.base import BaseHTTPMiddleware
 from starlette.responses import JSONResponse
-
-# Les variables de configuration (port, token MCP)
 from config import PORT, MCP_BEARER_TOKEN
 
-# Import du module contenant nos tools Dust
-import tools.agent_configurations
+# ── Import de chaque tool (1 fichier = 1 tool) ────────────────
+import tools.get_agent_configuration
+import tools.list_agent_configurations
+import tools.search_agent_by_name
+import tools.list_mcp_server_views
+import tools.list_skills
 
 
-# ── Initialisation du serveur MCP ─────────────────────────────
+# ── Initialisation ─────────────────────────────────────────────
 
-# On crée l'instance FastMCP avec :
-# - name : le nom du serveur (affiché dans Dust)
-# - host : "0.0.0.0" = accessible depuis n'importe quelle IP (requis pour Railway)
-# - port : le port d'écoute (lu depuis la variable d'environnement PORT)
-# - instructions : description du serveur pour guider l'agent qui l'utilise
 mcp = FastMCP(
     name="dust-agent-configurations-server",
     host="0.0.0.0",
     port=PORT,
     instructions=(
         "Serveur MCP pour interroger l'API Dust. "
-        "Outils disponibles : "
-        "- get_agent_configuration : récupère la configuration détaillée d'un agent Dust spécifique (nom, instructions, modèle, actions...). "
-        "- list_agent_configurations : liste tous les agents disponibles dans le workspace Dust. "
-        "Utilisez list_agent_configurations d'abord pour trouver le sId d'un agent, "
-        "puis get_agent_configuration pour en obtenir les détails complets."
+        "TOOLS DISPONIBLES : "
+        "1. get_agent_configuration(agent_sid, variant) : détails d'un agent par sId. "
+        "2. list_agent_configurations(view, variant) : liste tous les agents. "
+        "3. search_agent_by_name(query) : recherche des agents par nom. "
+        "4. list_mcp_server_views() : liste les vues de filtrage disponibles. "
+        "5. list_skills(status) : liste les skills du workspace. "
+        "WORKFLOW : search_agent_by_name ou list_agent_configurations "
+        "→ puis get_agent_configuration avec le sId pour les détails."
     )
 )
 
 
-# ── Enregistrement des outils ─────────────────────────────────
+# ── Enregistrement des outils ──────────────────────────────────
+# Chaque register(mcp) enregistre le @mcp.tool() de son fichier
 
-# On appelle register(mcp) pour chaque module de tools
-# Cette fonction enregistre tous les @mcp.tool() définis dans le fichier
-tools.agent_configurations.register(mcp)
+tools.get_agent_configuration.register(mcp)
+tools.list_agent_configurations.register(mcp)
+tools.search_agent_by_name.register(mcp)
+tools.list_mcp_server_views.register(mcp)
+tools.list_skills.register(mcp)
 
 
-# ── Middleware d'authentification ─────────────────────────────
+# ── Middleware d'authentification ──────────────────────────────
 
-# Ce middleware intercepte TOUTES les requêtes entrantes
-# avant qu'elles n'atteignent les tools MCP
 class BearerAuthMiddleware(BaseHTTPMiddleware):
     async def dispatch(self, request, call_next):
-        # On vérifie seulement si un token est configuré
-        # (si MCP_BEARER_TOKEN est vide, le serveur est ouvert — à éviter en prod)
         if MCP_BEARER_TOKEN:
-            # On récupère le header Authorization de la requête
             auth = request.headers.get("Authorization", "")
-            
-            # Le format attendu est : "Bearer VOTRE_TOKEN"
-            # On vérifie :
-            # 1. Que le header commence bien par "Bearer "
-            # 2. Que le token après "Bearer " correspond à notre token secret
             if not auth.startswith("Bearer ") or auth[7:].strip() != MCP_BEARER_TOKEN:
-                # Token absent ou invalide → on retourne une erreur 401
                 return JSONResponse({"error": "Non autorisé"}, status_code=401)
-        
-        # Token valide (ou pas de token configuré) → on laisse passer la requête
         return await call_next(request)
 
 
-# ── Démarrage du serveur ──────────────────────────────────────
+# ── Démarrage ──────────────────────────────────────────────────
 
-# Ce bloc ne s'exécute que quand on lance directement "python server.py"
 if __name__ == "__main__":
     print(f"🚀 Serveur MCP Dust démarré sur le port {PORT}")
     print(f"🔐 Auth : {'Activée' if MCP_BEARER_TOKEN else 'DÉSACTIVÉE'}")
-    
-    # On crée l'application ASGI (le serveur web)
-    # streamable_http_app() = mode HTTP streaming, requis pour Dust
     app = mcp.streamable_http_app()
-    
-    # On attache le middleware d'auth à l'application
     app.add_middleware(BearerAuthMiddleware)
-    
-    # On démarre le serveur uvicorn
-    # host="0.0.0.0" = accessible depuis l'extérieur (requis pour Railway)
-    # port=PORT = port défini dans les variables d'environnement
     uvicorn.run(app, host="0.0.0.0", port=PORT)
