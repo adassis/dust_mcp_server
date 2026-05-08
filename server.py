@@ -19,6 +19,7 @@ import tools.search_agent_by_name
 import tools.list_mcp_server_views
 import tools.list_skills
 import tools.list_agents     
+import tools.get_conversation
 
 
 # ── Initialisation ─────────────────────────────────────────────
@@ -50,6 +51,8 @@ tools.search_agent_by_name.register(mcp)
 tools.list_mcp_server_views.register(mcp)
 tools.list_skills.register(mcp)
 tools.list_agents.register(mcp)    
+tools.get_conversation.register(mcp)    
+
 
 
 # ── Middleware d'authentification ──────────────────────────────
