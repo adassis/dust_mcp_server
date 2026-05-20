@@ -2,18 +2,19 @@
 # tools/list_agents.py
 # =============================================================
 # Tool MCP : liste tous les agents du workspace Dust
-# avec leurs tools MCP, sous-agents, knowledge bases et skills
+# avec leurs capacités complètes ET leurs derniers auteurs.
 #
-# AVANT : retournait uniquement sId + name (variant=light)
-# APRÈS : retourne les capacités complètes de chaque agent (variant=full)
+# Fusionne les anciennes versions :
+#   - list_agents        (capacités enrichies : mcp_tools, sub_agents, etc.)
+#   - list_agents_with_authors (paramètre withAuthors=true)
 #
 # Endpoint : GET /api/v1/w/{wId}/assistant/agent_configurations
-#            ?view=all&variant=full
+#            ?view=all&variant=full&withAuthors=true
 # =============================================================
 
 import json
-from utils.dust import dust_get
-from config import DUST_WORKSPACE_ID
+from utils.dust import dust_get        # Client HTTP centralisé du projet
+from config import DUST_WORKSPACE_ID   # ID du workspace, lu depuis les variables d'env
 
 
 # =============================================================
@@ -22,27 +23,23 @@ from config import DUST_WORKSPACE_ID
 
 def _extract_capabilities(agent: dict) -> dict:
     """
-    Parse les 'actions' d'un agent et les classe en 4 catégories.
+    Parse le tableau 'actions' d'un agent (disponible uniquement en variant=full)
+    et classe chaque action en 4 catégories selon son type.
 
-    Dans l'API Dust avec variant=full, chaque agent expose un tableau
-    'actions' qui liste tous ses outils/capacités configurés.
-    Chaque action a un champ 'type' qui indique sa nature.
+    Catégories :
+      - mcp_tools      : outils MCP (serveurs externes connectés à l'agent)
+      - sub_agents     : sous-agents que cet agent peut appeler
+      - knowledge_bases: bases de connaissance connectées (retrieval/search)
+      - other_actions  : tout le reste (tables, apps Dust, etc.)
 
-    On classe selon ces règles :
-      - type contient "mcp"                     → mcp_tools
-      - type contient "agent"                   → sub_agents
-      - type contient "retrieval" ou "search"   → knowledge_bases
-      - tout le reste                           → other_actions
-
-    Les skills sont un tableau SÉPARÉ au niveau racine de l'agent
-    (pas dans 'actions') — traités à part.
+    Les skills sont dans un tableau séparé à la racine de l'agent
+    (pas dans 'actions') — traités indépendamment.
 
     Args:
         agent : dictionnaire d'un agent tel que retourné par l'API Dust
 
     Returns:
-        dict avec les 5 clés : mcp_tools, sub_agents, knowledge_bases,
-        skills, other_actions
+        dict avec 5 clés : mcp_tools, sub_agents, knowledge_bases, skills, other_actions
     """
     mcp_tools      = []
     sub_agents     = []
@@ -50,85 +47,78 @@ def _extract_capabilities(agent: dict) -> dict:
     other_actions  = []
 
     for action in agent.get("actions", []):
-
-        # On lit le type en minuscules pour faciliter la comparaison
+        # On lit le type en minuscules pour faciliter les comparaisons
         action_type = action.get("type", "").lower()
         name        = action.get("name", "")
 
-        # ── CAS 1 : Tool MCP ──────────────────────────────────
-        # Exemples de types : "mcp_server_tool_configuration", "mcp_configuration"
+        # ── CAS 1 : Tool MCP ──────────────────────────────────────────────
+        # Types : "mcp_server_tool_configuration", "mcp_configuration", etc.
         if "mcp" in action_type:
             mcp_tools.append({
-                "name":           name,
-                "description":    action.get("description"),
-                # L'ID du serveur MCP peut être sous deux noms selon la version de l'API
-                "server_view_id": (
+                "name"           : name,
+                "description"    : action.get("description"),
+                # L'ID du serveur MCP peut avoir deux noms selon la version de l'API
+                "server_view_id" : (
                     action.get("mcpServerViewId") or
                     action.get("serverViewId")
                 ),
-                "type": action.get("type"),
+                "type"           : action.get("type"),
             })
 
-        # ── CAS 2 : Sous-agent ────────────────────────────────
+        # ── CAS 2 : Sous-agent ────────────────────────────────────────────
         # Un sous-agent = action qui appelle un autre agent Dust
-        # Type contient "agent" mais pas "mcp" (déjà capturé ci-dessus)
         elif "agent" in action_type:
             sub_agents.append({
-                "name": name,
-                # L'ID de l'agent cible peut être sous deux noms différents
-                "agent_configuration_id": (
+                "name"                    : name,
+                # L'ID de l'agent cible peut avoir deux noms différents
+                "agent_configuration_id"  : (
                     action.get("agentConfigurationId") or
                     action.get("configuration_id")
                 ),
-                "type": action.get("type"),
+                "type"                    : action.get("type"),
             })
 
-        # ── CAS 3 : Knowledge base ────────────────────────────
-        # Bases de connaissance : "retrieval_configuration", "search_configuration"
+        # ── CAS 3 : Knowledge base ────────────────────────────────────────
+        # Types : "retrieval_configuration", "search_configuration"
         elif "retrieval" in action_type or "search" in action_type:
             data_sources = action.get("dataSources", [])
-
             if data_sources:
-                # Une action peut pointer vers plusieurs sources
+                # Une action peut pointer vers plusieurs sources → on itère
                 for ds in data_sources:
                     knowledge_bases.append({
-                        "name":           ds.get("name") or ds.get("dataSourceId"),
-                        "data_source_id": ds.get("dataSourceId"),
-                        "workspace_id":   ds.get("workspaceId"),
+                        "name"           : ds.get("name") or ds.get("dataSourceId"),
+                        "data_source_id" : ds.get("dataSourceId"),
+                        "workspace_id"   : ds.get("workspaceId"),
                     })
             else:
-                # Pas de détail de source → on note quand même l'action
+                # Pas de détail de source → on note l'action quand même
                 knowledge_bases.append({
-                    "name": name,
-                    "type": action.get("type"),
+                    "name" : name,
+                    "type" : action.get("type"),
                 })
 
-        # ── CAS 4 : Autre action ──────────────────────────────
-        # Tables, apps Dust, etc. On garde une trace pour ne rien perdre
+        # ── CAS 4 : Autre action ──────────────────────────────────────────
+        # Tables, apps Dust, etc.
         else:
             if name or action.get("type"):
                 other_actions.append({
-                    "name": name,
-                    "type": action.get("type"),
+                    "name" : name,
+                    "type" : action.get("type"),
                 })
 
-    # ── Skills ────────────────────────────────────────────────
-    # Les skills sont dans un tableau séparé à la racine de l'agent
-    # (pas dans 'actions') — on les traite donc indépendamment
+    # ── Skills ────────────────────────────────────────────────────────────
+    # Tableau séparé à la racine de l'agent (pas dans 'actions')
     skills = [
-        {
-            "name": skill.get("name"),
-            "sId":  skill.get("sId"),
-        }
+        {"name": skill.get("name"), "sId": skill.get("sId")}
         for skill in agent.get("skills", [])
     ]
 
     return {
-        "mcp_tools":       mcp_tools,
-        "sub_agents":      sub_agents,
+        "mcp_tools"      : mcp_tools,
+        "sub_agents"     : sub_agents,
         "knowledge_bases": knowledge_bases,
-        "skills":          skills,
-        "other_actions":   other_actions,
+        "skills"         : skills,
+        "other_actions"  : other_actions,
     }
 
 
@@ -137,70 +127,123 @@ def _extract_capabilities(agent: dict) -> dict:
 # =============================================================
 
 def register(mcp):
+    """
+    Enregistre le tool 'list_agents' dans le serveur MCP.
+    Appelé par server.py au démarrage via tools.list_agents.register(mcp).
+    """
 
     @mcp.tool()
-    def list_agents() -> str:
+    def list_agents(
+        view          : str  = "all",
+        with_authors  : bool = False,
+        include_inactive: bool = False
+    ) -> str:
         """
-        Retourne la liste de tous les agents du workspace Dust
-        avec leurs capacités complètes.
+        Retourne la liste complète des agents du workspace Dust
+        avec leurs capacités enrichies et, optionnellement, leurs derniers auteurs.
 
         Pour chaque agent, retourne :
-          - sId et name       : identifiants de l'agent
-          - description       : description de l'agent
-          - status            : statut (active, etc.)
-          - scope             : portée (workspace, published, global...)
-          - model             : modèle LLM utilisé (id + provider)
-          - mcp_tools         : tools MCP (serveurs externes) configurés
-          - sub_agents        : sous-agents que cet agent peut appeler
-          - knowledge_bases   : bases de connaissance connectées
-          - skills            : skills activés sur cet agent
-          - other_actions     : autres actions (tables, apps Dust, etc.)
+          - sId et name      : identifiants de l'agent
+          - description      : description de l'agent
+          - status           : statut (active, etc.)
+          - scope            : portée (workspace, published, global...)
+          - model            : modèle LLM utilisé (id + provider + température)
+          - mcp_tools        : outils MCP (serveurs externes) configurés sur l'agent
+          - sub_agents       : sous-agents que cet agent peut appeler
+          - knowledge_bases  : bases de connaissance connectées
+          - skills           : skills activées sur cet agent
+          - other_actions    : autres actions (tables, apps Dust, etc.)
+          - lastAuthors      : (si with_authors=True) utilisateurs ayant récemment édité l'agent
+
+        Args:
+            view            : Filtre de vue :
+                              - "all"       (défaut) : tous les agents non-privés
+                              - "workspace" : agents dont le scope est 'workspace'
+                              - "published" : agents publiés publiquement
+                              - "global"    : agents globaux Dust (@dust, @gpt4, etc.)
+                              ⚠️ "list" et "favorites" requièrent OAuth (incompatible clé API)
+
+            with_authors    : Si True, inclut le champ 'lastAuthors' sur chaque agent
+                              avec les infos des utilisateurs ayant récemment édité l'agent.
+                              Défaut : False.
+
+            include_inactive: Si True, inclut les agents inactifs/archivés.
+                              Défaut : False.
 
         Returns:
-            JSON avec total (nombre d'agents) et agents (tableau enrichi).
+            JSON avec :
+              - total   : nombre d'agents retournés
+              - agents  : tableau d'agents enrichis
         """
         try:
+            # ── Validation de la vue ──────────────────────────────────────
+            # "list" et "favorites" ne fonctionnent qu'en OAuth, pas avec une clé API
+            valid_views = ["all", "workspace", "published", "global"]
+            if view not in valid_views:
+                return json.dumps({
+                    "error" : f"Vue '{view}' non supportée avec une clé API.",
+                    "hint"  : f"Vues disponibles : {valid_views}. "
+                              f"'list' et 'favorites' requièrent OAuth."
+                }, ensure_ascii=False)
+
             path = f"/w/{DUST_WORKSPACE_ID}/assistant/agent_configurations"
 
-            # variant=full est OBLIGATOIRE pour obtenir le tableau 'actions'
-            # Sans lui, 'actions' est absent et on ne peut pas extraire
-            # les tools MCP, sous-agents ni les knowledge bases.
-            # view=all → tous les agents non-privés, compatible clé API
-            data = dust_get(path, params={"view": "all", "variant": "full"})
+            # ── Construction des paramètres ───────────────────────────────
+            params = {
+                "view"    : view,
+                "variant" : "full",   # OBLIGATOIRE pour obtenir 'actions'
+                                      # (nécessaire pour _extract_capabilities)
+            }
+
+            # withAuthors est ajouté seulement si demandé
+            # (l'API attend la string "true", pas un booléen Python)
+            if with_authors:
+                params["withAuthors"] = "true"
+
+            # ── Appel API ─────────────────────────────────────────────────
+            data = dust_get(path, params=params)
 
             agents_raw = data.get("agentConfigurations", [])
+
+            # ── Filtrage des inactifs (si demandé) ────────────────────────
+            if not include_inactive:
+                # On garde uniquement les agents dont le status est "active"
+                agents_raw = [a for a in agents_raw if a.get("status") == "active"]
+
+            # ── Enrichissement de chaque agent ────────────────────────────
             agents = []
-
             for agent in agents_raw:
-
-                # ── Infos de base ──────────────────────────────
                 model_raw = agent.get("model", {})
 
                 enriched = {
-                    "sId":         agent.get("sId", ""),
-                    "name":        agent.get("name", ""),
+                    "sId"        : agent.get("sId", ""),
+                    "name"       : agent.get("name", ""),
                     "description": agent.get("description", ""),
-                    "status":      agent.get("status", ""),
-                    "scope":       agent.get("scope", ""),
-
-                    # Le modèle peut avoir des noms de clés différents
-                    # selon la version de l'API — on gère les deux
-                    "model": {
-                        "model_id":    model_raw.get("modelId")    or model_raw.get("model_id"),
+                    "status"     : agent.get("status", ""),
+                    "scope"      : agent.get("scope", ""),
+                    # Le modèle peut avoir des noms de clés différents selon la version de l'API
+                    "model"      : {
+                        "model_id"   : model_raw.get("modelId")    or model_raw.get("model_id"),
                         "provider_id": model_raw.get("providerId") or model_raw.get("provider_id"),
+                        "temperature": model_raw.get("temperature"),
                     } if model_raw else None,
                 }
 
-                # ── Ajout des capacités enrichies ──────────────
-                # _extract_capabilities() parse 'actions' + 'skills'
-                # et retourne les 5 catégories prêtes à l'emploi
+                # Ajout des capacités enrichies (mcp_tools, sub_agents, etc.)
                 enriched.update(_extract_capabilities(agent))
+
+                # Ajout des auteurs récents si withAuthors=true a été demandé
+                # lastAuthors est un tableau retourné directement par l'API Dust
+                if with_authors:
+                    enriched["lastAuthors"] = agent.get("lastAuthors", [])
 
                 agents.append(enriched)
 
             return json.dumps({
-                "total":  len(agents),
-                "agents": agents,
+                "total"       : len(agents),
+                "view"        : view,
+                "with_authors": with_authors,
+                "agents"      : agents,
             }, ensure_ascii=False, indent=2)
 
         except Exception as e:
