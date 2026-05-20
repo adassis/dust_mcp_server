@@ -2,8 +2,8 @@
 # server.py — Point d'entrée du serveur MCP Dust
 # =============================================================
 # Pour ajouter un nouvel outil :
-#   1. Créer tools/mon_outil.py avec une fonction register(mcp)
-#   2. Ajouter import + register() ci-dessous
+# 1. Créer tools/mon_outil.py avec une fonction register(mcp)
+# 2. Ajouter import + register() ci-dessous
 # =============================================================
 
 import uvicorn
@@ -18,12 +18,11 @@ import tools.list_agent_configurations
 import tools.search_agent_by_name
 import tools.list_mcp_server_views
 import tools.list_skills
-import tools.list_agents     
+import tools.list_agents          # ← Fusionné : capacités enrichies + withAuthors
 import tools.get_conversation
-
+import tools.get_workspace_usage  # ← NOUVEAU : données d'usage du workspace
 
 # ── Initialisation ─────────────────────────────────────────────
-
 mcp = FastMCP(
     name="dust-agent-configurations-server",
     host="0.0.0.0",
@@ -31,32 +30,35 @@ mcp = FastMCP(
     instructions=(
         "Serveur MCP pour interroger l'API Dust. "
         "TOOLS DISPONIBLES : "
-        "1. get_agent_configuration(agent_sid, variant) : détails d'un agent par sId. "
-        "2. list_agent_configurations(view, variant) : liste tous les agents. "
+        "1. get_agent_configuration(agent_sid, variant) : détails complets d'un agent par sId. "
+        "2. list_agent_configurations(view, variant) : liste simple des agents. "
         "3. search_agent_by_name(query) : recherche des agents par nom. "
         "4. list_mcp_server_views() : liste les vues de filtrage disponibles. "
         "5. list_skills(status) : liste les skills du workspace. "
-        "WORKFLOW : search_agent_by_name ou list_agent_configurations "
-        "→ puis get_agent_configuration avec le sId pour les détails."
+        "6. list_agents(view, with_authors, include_inactive) : liste enrichie avec "
+        "   mcp_tools, sub_agents, knowledge_bases, skills — "
+        "   et optionnellement les derniers auteurs (with_authors=True). "
+        "7. get_conversation(conversation_id) : récupère une conversation par son ID. "
+        "8. get_workspace_usage(start, table, mode, end) : données d'usage du workspace "
+        "   (users, assistant_messages, builders, assistants, feedback). "
+        "   ⚠️ Deprecated après 01/06/2026. "
+        "WORKFLOW recommandé : search_agent_by_name ou list_agent_configurations "
+        "→ puis get_agent_configuration avec le sId pour les détails complets."
     )
 )
 
-
 # ── Enregistrement des outils ──────────────────────────────────
 # Chaque register(mcp) enregistre le @mcp.tool() de son fichier
-
 tools.get_agent_configuration.register(mcp)
 tools.list_agent_configurations.register(mcp)
 tools.search_agent_by_name.register(mcp)
 tools.list_mcp_server_views.register(mcp)
 tools.list_skills.register(mcp)
-tools.list_agents.register(mcp)    
-tools.get_conversation.register(mcp)    
-
-
+tools.list_agents.register(mcp)
+tools.get_conversation.register(mcp)
+tools.get_workspace_usage.register(mcp)    # ← NOUVEAU
 
 # ── Middleware d'authentification ──────────────────────────────
-
 class BearerAuthMiddleware(BaseHTTPMiddleware):
     async def dispatch(self, request, call_next):
         if MCP_BEARER_TOKEN:
@@ -65,9 +67,7 @@ class BearerAuthMiddleware(BaseHTTPMiddleware):
                 return JSONResponse({"error": "Non autorisé"}, status_code=401)
         return await call_next(request)
 
-
 # ── Démarrage ──────────────────────────────────────────────────
-
 if __name__ == "__main__":
     print(f"🚀 Serveur MCP Dust démarré sur le port {PORT}")
     print(f"🔐 Auth : {'Activée' if MCP_BEARER_TOKEN else 'DÉSACTIVÉE'}")
