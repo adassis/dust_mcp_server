@@ -18,9 +18,9 @@ import tools.list_agent_configurations
 import tools.search_agent_by_name
 import tools.list_mcp_server_views
 import tools.list_skills
-import tools.list_agents          # ← Fusionné : capacités enrichies + withAuthors
+import tools.list_agents
 import tools.get_conversation
-import tools.get_workspace_usage  # ← NOUVEAU : données d'usage du workspace
+import tools.export_analytics          # ← LIGNE AJOUTÉE
 
 # ── Initialisation ─────────────────────────────────────────────
 mcp = FastMCP(
@@ -30,20 +30,14 @@ mcp = FastMCP(
     instructions=(
         "Serveur MCP pour interroger l'API Dust. "
         "TOOLS DISPONIBLES : "
-        "1. get_agent_configuration(agent_sid, variant) : détails complets d'un agent par sId. "
-        "2. list_agent_configurations(view, variant) : liste simple des agents. "
+        "1. get_agent_configuration(agent_sid, variant) : détails d'un agent par sId. "
+        "2. list_agent_configurations(view, variant) : liste tous les agents. "
         "3. search_agent_by_name(query) : recherche des agents par nom. "
         "4. list_mcp_server_views() : liste les vues de filtrage disponibles. "
         "5. list_skills(status) : liste les skills du workspace. "
-        "6. list_agents(view, with_authors, include_inactive) : liste enrichie avec "
-        "   mcp_tools, sub_agents, knowledge_bases, skills — "
-        "   et optionnellement les derniers auteurs (with_authors=True). "
-        "7. get_conversation(conversation_id) : récupère une conversation par son ID. "
-        "8. get_workspace_usage(start, table, mode, end) : données d'usage du workspace "
-        "   (users, assistant_messages, builders, assistants, feedback). "
-        "   ⚠️ Deprecated après 01/06/2026. "
-        "WORKFLOW recommandé : search_agent_by_name ou list_agent_configurations "
-        "→ puis get_agent_configuration avec le sId pour les détails complets."
+        "6. export_analytics(table, start_date, end_date, timezone) : exporte les analytiques du workspace (nécessite clé API admin). "  # ← LIGNE AJOUTÉE
+        "WORKFLOW : search_agent_by_name ou list_agent_configurations "
+        "→ puis get_agent_configuration avec le sId pour les détails."
     )
 )
 
@@ -56,7 +50,7 @@ tools.list_mcp_server_views.register(mcp)
 tools.list_skills.register(mcp)
 tools.list_agents.register(mcp)
 tools.get_conversation.register(mcp)
-tools.get_workspace_usage.register(mcp)    # ← NOUVEAU
+tools.export_analytics.register(mcp)   # ← LIGNE AJOUTÉE
 
 # ── Middleware d'authentification ──────────────────────────────
 class BearerAuthMiddleware(BaseHTTPMiddleware):
