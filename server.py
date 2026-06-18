@@ -20,7 +20,8 @@ import tools.list_mcp_server_views
 import tools.list_skills
 import tools.list_agents
 import tools.get_conversation
-import tools.export_analytics          # ← LIGNE AJOUTÉE
+import tools.export_analytics
+import tools.get_space_mcp_server_views 
 
 # ── Initialisation ─────────────────────────────────────────────
 mcp = FastMCP(
@@ -50,7 +51,8 @@ tools.list_mcp_server_views.register(mcp)
 tools.list_skills.register(mcp)
 tools.list_agents.register(mcp)
 tools.get_conversation.register(mcp)
-tools.export_analytics.register(mcp)   # ← LIGNE AJOUTÉE
+tools.export_analytics.register(mcp)
+tools.get_space_mcp_server_views.register(mcp)
 
 # ── Middleware d'authentification ──────────────────────────────
 class BearerAuthMiddleware(BaseHTTPMiddleware):
