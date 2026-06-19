@@ -75,3 +75,42 @@ def dust_get(path: str, params: dict = None) -> dict:
         )
 
     return result
+
+
+def dust_get_text(path: str, accept: str = "text/plain", params: dict = None) -> str:
+    """
+    GET authentifié → retourne le contenu brut en texte.
+
+    Utilisé pour les endpoints qui ne retournent PAS du JSON,
+    comme /export/yaml qui retourne un fichier YAML en texte brut.
+
+    Args:
+        path   : chemin de l'endpoint
+        accept : type MIME attendu ("text/yaml", "text/plain", etc.)
+        params : paramètres query string optionnels
+
+    Returns:
+        str : le contenu texte brut de la réponse
+
+    Raises:
+        RuntimeError : si credentials manquants ou erreur HTTP
+    """
+    _check_credentials()
+
+    headers = {
+        "Authorization": f"Bearer {DUST_API_KEY}",
+        "Accept"       : accept    # "text/yaml" pour l'export YAML
+    }
+
+    r = requests.get(
+        BASE_URL + path,
+        headers=headers,
+        params=params or {},
+        timeout=30
+    )
+
+    if not r.ok:
+        raise RuntimeError(f"GET {path} → HTTP {r.status_code}: {r.text[:400]}")
+
+    # On retourne le texte brut — pas r.json() !
+    return r.text
