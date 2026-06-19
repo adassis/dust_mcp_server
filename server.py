@@ -13,15 +13,15 @@ from starlette.responses import JSONResponse
 from config import PORT, MCP_BEARER_TOKEN
 
 # ── Import de chaque tool (1 fichier = 1 tool) ────────────────
-import tools.get_agent_configuration
-import tools.list_agent_configurations
+# ❌ Supprimés : list_agents, get_agent_configuration
+# ✅ Ajouté    : get_agent_yaml
+import tools.get_agent_yaml              
 import tools.search_agent_by_name
 import tools.list_mcp_server_views
 import tools.list_skills
-import tools.list_agents
 import tools.get_conversation
 import tools.export_analytics
-import tools.get_space_mcp_server_views 
+import tools.get_space_mcp_server_views
 
 # ── Initialisation ─────────────────────────────────────────────
 mcp = FastMCP(
@@ -31,25 +31,24 @@ mcp = FastMCP(
     instructions=(
         "Serveur MCP pour interroger l'API Dust. "
         "TOOLS DISPONIBLES : "
-        "1. get_agent_configuration(agent_sid, variant) : détails d'un agent par sId. "
+        "1. get_agent_yaml(agent_sid) : exporte la config complète d'un agent au format YAML. "
         "2. list_agent_configurations(view, variant) : liste tous les agents. "
         "3. search_agent_by_name(query) : recherche des agents par nom. "
         "4. list_mcp_server_views() : liste les vues de filtrage disponibles. "
         "5. list_skills(status) : liste les skills du workspace. "
-        "6. export_analytics(table, start_date, end_date, timezone) : exporte les analytiques du workspace (nécessite clé API admin). "  # ← LIGNE AJOUTÉE
-        "WORKFLOW : search_agent_by_name ou list_agent_configurations "
-        "→ puis get_agent_configuration avec le sId pour les détails."
+        "6. export_analytics(table, start_date, end_date, timezone) : exporte les analytiques. "
+        "7. get_conversation(conversation_id) : récupère une conversation. "
+        "8. get_space_mcp_server_views() : liste les vues MCP server par space. "
+        "WORKFLOW RECOMMANDÉ : list_agent_configurations ou search_agent_by_name "
+        "→ puis get_agent_yaml avec le sId pour la config complète."
     )
 )
 
 # ── Enregistrement des outils ──────────────────────────────────
-# Chaque register(mcp) enregistre le @mcp.tool() de son fichier
-tools.get_agent_configuration.register(mcp)
-tools.list_agent_configurations.register(mcp)
+tools.get_agent_yaml.register(mcp)            
 tools.search_agent_by_name.register(mcp)
 tools.list_mcp_server_views.register(mcp)
 tools.list_skills.register(mcp)
-tools.list_agents.register(mcp)
 tools.get_conversation.register(mcp)
 tools.export_analytics.register(mcp)
 tools.get_space_mcp_server_views.register(mcp)
