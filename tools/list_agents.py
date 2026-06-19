@@ -5,7 +5,7 @@
 # avec leurs capacités complètes ET leurs derniers auteurs.
 #
 # Endpoint : GET /api/v1/w/{wId}/assistant/agent_configurations
-#            ?view=all&variant=full&withAuthors=true
+#            ?view=all&variant=full&withAuthors=truee
 # =============================================================
 
 import json
