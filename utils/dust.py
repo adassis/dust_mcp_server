@@ -114,3 +114,48 @@ def dust_get_text(path: str, accept: str = "text/plain", params: dict = None) ->
 
     # On retourne le texte brut — pas r.json() !
     return r.text
+
+def dust_patch(path: str, body: dict) -> dict:
+    """
+    PATCH authentifié → envoie un body JSON partiel et retourne un dict JSON.
+
+    Utilisé pour les mises à jour partielles (seuls les champs envoyés
+    sont modifiés, les autres restent inchangés).
+
+    Args:
+        path : chemin de l'endpoint
+        body : dict Python représentant le body JSON à envoyer
+
+    Returns:
+        dict : la réponse JSON de l'API Dust
+
+    Raises:
+        RuntimeError : si credentials manquants, erreur HTTP ou réponse non-dict
+    """
+    _check_credentials()
+
+    headers = {
+        "Authorization": f"Bearer {DUST_API_KEY}",
+        "Content-Type" : "application/json",
+        "Accept"       : "application/json"
+    }
+
+    r = requests.patch(
+        BASE_URL + path,
+        headers=headers,
+        json=body,       # requests sérialise automatiquement le dict en JSON
+        timeout=30
+    )
+
+    if not r.ok:
+        raise RuntimeError(f"PATCH {path} → HTTP {r.status_code}: {r.text[:400]}")
+
+    result = r.json()
+
+    if not isinstance(result, dict):
+        raise RuntimeError(
+            f"PATCH {path} → Réponse inattendue "
+            f"(type: {type(result).__name__}) : {str(result)[:200]}"
+        )
+
+    return result
