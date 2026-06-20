@@ -22,6 +22,7 @@ import tools.list_skills
 import tools.get_conversation
 import tools.export_analytics
 import tools.get_space_mcp_server_views
+import tools.update_agent_configuration
 
 # ── Initialisation ─────────────────────────────────────────────
 mcp = FastMCP(
@@ -52,6 +53,7 @@ tools.list_skills.register(mcp)
 tools.get_conversation.register(mcp)
 tools.export_analytics.register(mcp)
 tools.get_space_mcp_server_views.register(mcp)
+tools.update_agent_configuration.register(mcp)
 
 # ── Middleware d'authentification ──────────────────────────────
 class BearerAuthMiddleware(BaseHTTPMiddleware):
