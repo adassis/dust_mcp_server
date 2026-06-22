@@ -30,6 +30,7 @@ def register(mcp):
         model_provider_id: str = None,
         model_id: str = None,
         temperature: float = None,
+        reasoning_effort: str = None,       # ← AJOUTÉ
         user_favorite: bool = None,
         skills_json: str = None,
         toolset_json: str = None,
@@ -119,6 +120,7 @@ def register(mcp):
                                    "o1"
                                    "o3-mini"
             - "google_ai_studio" → "gemini-2.0-flash-001"
+                                   "gemini-2.5-flash"
                                    "gemini-1.5-pro"
             - "mistral"          → "mistral-large-latest"
                                    "mistral-small-latest"
@@ -150,6 +152,46 @@ def register(mcp):
             update_agent_configuration(
                 agent_sid="7f3a9c2b1e",
                 temperature=0.2
+            )
+
+        ────────────────────────────────────────────────────────
+        reasoning_effort (str, optionnel)
+        ────────────────────────────────────────────────────────
+            Contrôle le niveau de raisonnement étendu (extended thinking)
+            du modèle. Fait partie de generation_settings.
+
+            VALEURS POSSIBLES :
+            - "low"    : raisonnement minimal, réponses plus rapides
+            - "medium" : équilibre vitesse / profondeur (défaut courant)
+            - "high"   : raisonnement approfondi, meilleure qualité
+                         sur les tâches complexes (plus lent)
+
+            COMPATIBILITÉ :
+            Tous les modèles ne supportent pas reasoning_effort.
+            Modèles compatibles connus :
+            - google_ai_studio : gemini-2.5-flash, gemini-2.5-pro
+            - anthropic        : claude-opus-4-5 (extended thinking)
+            - openai           : o1, o3-mini (effort paramétrable)
+
+            QUAND L'UTILISER :
+            - L'utilisateur veut "activer le raisonnement avancé"
+            - L'utilisateur veut "plus de réflexion", "extended thinking"
+            - L'utilisateur veut "raisonnement high/medium/low"
+            - L'utilisateur veut accélérer les réponses → "low"
+            - L'utilisateur veut plus de qualité sur tâches complexes → "high"
+
+            EXEMPLE — passer le raisonnement à "high" :
+            update_agent_configuration(
+                agent_sid="7f3a9c2b1e",
+                reasoning_effort="high"
+            )
+
+            EXEMPLE — combiner changement de modèle + reasoning_effort :
+            update_agent_configuration(
+                agent_sid="7f3a9c2b1e",
+                model_provider_id="google_ai_studio",
+                model_id="gemini-2.5-flash",
+                reasoning_effort="high"
             )
 
         ────────────────────────────────────────────────────────
@@ -277,20 +319,19 @@ def register(mcp):
         EXEMPLES COMBINÉS
         ════════════════════════════════════════════════════════
 
-        # Changer modèle + température + instructions en une seule fois :
+        # Changer modèle + température + reasoning_effort en une seule fois :
         update_agent_configuration(
             agent_sid="7f3a9c2b1e",
-            instructions="Tu es un assistant factuel. Réponds en moins de 3 phrases.",
-            model_provider_id="anthropic",
-            model_id="claude-haiku-3-5",
-            temperature=0.1
+            model_provider_id="google_ai_studio",
+            model_id="gemini-2.5-flash",
+            temperature=0.7,
+            reasoning_effort="high"
         )
 
-        # Ajouter un serveur MCP sans toucher aux autres paramètres :
-        # (récupère d'abord le toolset actuel via get_agent_yaml)
+        # Changer uniquement le reasoning_effort sans toucher au reste :
         update_agent_configuration(
             agent_sid="7f3a9c2b1e",
-            toolset_json='[...toolset_existant..., {"type":"MCP",...}]'
+            reasoning_effort="high"
         )
 
         ════════════════════════════════════════════════════════
@@ -310,6 +351,15 @@ def register(mcp):
                              "search_agent_by_name pour trouver le sId."
                 }, ensure_ascii=False)
 
+            # ── Validation reasoning_effort ────────────────────────
+            VALID_REASONING_EFFORTS = {"low", "medium", "high"}
+            if reasoning_effort is not None:
+                if reasoning_effort not in VALID_REASONING_EFFORTS:
+                    return json.dumps({
+                        "error": f"reasoning_effort invalide : '{reasoning_effort}'.",
+                        "hint" : "Valeurs acceptées : 'low', 'medium', 'high'."
+                    }, ensure_ascii=False)
+
             # ── Construction du body PATCH ─────────────────────────
             # STRUCTURE CORRECTE : tous les champs sont au niveau RACINE.
             # L'objet "agent" ne contient QUE les métadonnées
@@ -326,8 +376,8 @@ def register(mcp):
                 body["instructions"] = instructions
 
             # 3. generation_settings → racine, clés en snake_case
-            #    ⚠️ Les clés sont provider_id et model_id (snake_case),
-            #    PAS providerId / modelId (camelCase).
+            #    Regroupe : provider_id, model_id, temperature, reasoning_effort
+            #    ⚠️ Les clés sont snake_case (PAS camelCase).
             generation_settings = {}
             if model_provider_id is not None:
                 generation_settings["provider_id"] = model_provider_id  # snake_case ✅
@@ -340,6 +390,8 @@ def register(mcp):
                                  f"(reçu : {temperature})"
                     }, ensure_ascii=False)
                 generation_settings["temperature"] = temperature
+            if reasoning_effort is not None:
+                generation_settings["reasoning_effort"] = reasoning_effort  # ✅ AJOUTÉ
 
             if generation_settings:
                 body["generation_settings"] = generation_settings       # racine ✅
@@ -400,15 +452,15 @@ def register(mcp):
                 return json.dumps({
                     "error": "Aucun paramètre fourni. Rien à modifier.",
                     "hint" : "Fournis au moins un paramètre parmi : instructions, "
-                             "model_provider_id, model_id, temperature, user_favorite, "
-                             "skills_json, toolset_json, tags_json."
+                             "model_provider_id, model_id, temperature, reasoning_effort, "
+                             "user_favorite, skills_json, toolset_json, tags_json."
                 }, ensure_ascii=False)
 
             # ── Appel API ──────────────────────────────────────────
-            # ⚠️ BASE_URL = "https://dust.tt/api/v1" (déjà défini dans utils/dust.py)
+            # ⚠️ BASE_URL = "https://dust.tt/api/v1" (déjà dans utils/dust.py)
             # → Le path commence par /w/ uniquement, PAS /api/v1/w/
             endpoint = (
-                f"/w/{DUST_WORKSPACE_ID}"                                # ✅ CORRIGÉ
+                f"/w/{DUST_WORKSPACE_ID}"                                # ✅ sans /api/v1
                 f"/assistant/agent_configurations/{agent_sid.strip()}"
             )
             result = dust_patch(endpoint, body)
