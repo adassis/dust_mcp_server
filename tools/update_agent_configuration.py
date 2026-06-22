@@ -30,7 +30,8 @@ def register(mcp):
         model_provider_id: str = None,
         model_id: str = None,
         temperature: float = None,
-        reasoning_effort: str = None,       # ← AJOUTÉ
+        reasoning_effort: str = None,
+        max_steps_per_run: int = None,      # ← AJOUTÉ
         user_favorite: bool = None,
         skills_json: str = None,
         toolset_json: str = None,
@@ -59,7 +60,9 @@ def register(mcp):
         ════════════════════════════════════════════════════════
         STRUCTURE DU BODY API (à connaître absolument)
         ════════════════════════════════════════════════════════
-        Les champs sont au NIVEAU RACINE du body, PAS imbriqués :
+        Les champs sont au NIVEAU RACINE du body, PAS imbriqués.
+        EXCEPTION : max_steps_per_run et visualization_enabled
+        sont dans le sous-objet "agent".
 
         {
           "userFavorite": bool,
@@ -141,7 +144,9 @@ def register(mcp):
         ────────────────────────────────────────────────────────
         temperature (float, optionnel)
         ────────────────────────────────────────────────────────
-            Niveau de créativité du modèle. Valeur entre 0.0 et 1.0.
+            Niveau de créativité du modèle.
+
+            VALEURS POSSIBLES : float entre 0.0 et 1.0 (inclus)
 
             RECOMMANDATIONS :
             - 0.0 → 0.3 : tâches factuelles, analyse, code, SQL
@@ -160,11 +165,15 @@ def register(mcp):
             Contrôle le niveau de raisonnement étendu (extended thinking)
             du modèle. Fait partie de generation_settings.
 
-            VALEURS POSSIBLES :
-            - "low"    : raisonnement minimal, réponses plus rapides
+            VALEURS POSSIBLES (enum strict) :
+            - "none"   : raisonnement désactivé
+            - "light"  : raisonnement minimal, réponses plus rapides
             - "medium" : équilibre vitesse / profondeur (défaut courant)
             - "high"   : raisonnement approfondi, meilleure qualité
                          sur les tâches complexes (plus lent)
+
+            ⚠️ La valeur "low" N'EXISTE PAS dans l'API Dust.
+               Utiliser "light" pour le niveau le plus bas.
 
             COMPATIBILITÉ :
             Tous les modèles ne supportent pas reasoning_effort.
@@ -176,8 +185,7 @@ def register(mcp):
             QUAND L'UTILISER :
             - L'utilisateur veut "activer le raisonnement avancé"
             - L'utilisateur veut "plus de réflexion", "extended thinking"
-            - L'utilisateur veut "raisonnement high/medium/low"
-            - L'utilisateur veut accélérer les réponses → "low"
+            - L'utilisateur veut accélérer les réponses → "light"
             - L'utilisateur veut plus de qualité sur tâches complexes → "high"
 
             EXEMPLE — passer le raisonnement à "high" :
@@ -195,11 +203,50 @@ def register(mcp):
             )
 
         ────────────────────────────────────────────────────────
+        max_steps_per_run (int, optionnel)
+        ────────────────────────────────────────────────────────
+            Nombre maximum d'étapes (appels LLM + tools) que l'agent
+            peut enchaîner en une seule conversation.
+            Envoyé dans le sous-objet "agent" du body PATCH.
+
+            VALEURS POSSIBLES : entier entre 1 et 64 (inclus)
+
+            RECOMMANDATIONS :
+            - 1  → 5  : agent ultra-simple, réponse directe sans tool
+            - 6  → 15 : workflow linéaire, 3 à 7 outils max
+            - 16 → 30 : workflow multi-étapes, boucles légères
+            - 31 → 64 : agent complexe / orchestrateur (défaut Dust = 64)
+
+            ⚠️ Une valeur trop haute consomme inutilement des tokens si
+               l'agent entre dans une boucle. Préférer une valeur adaptée
+               au workflow réel de l'agent.
+
+            QUAND L'UTILISER :
+            - L'utilisateur veut limiter les coûts token sur un agent simple
+            - L'utilisateur veut éviter les boucles infinies
+            - L'agent a un workflow clair en N étapes → max = N * 2 + marge
+
+            EXEMPLE — réduire à 10 pour un agent 3 étapes :
+            update_agent_configuration(
+                agent_sid="7f3a9c2b1e",
+                max_steps_per_run=10
+            )
+
+            EXEMPLE — combiner avec reasoning_effort :
+            update_agent_configuration(
+                agent_sid="7f3a9c2b1e",
+                max_steps_per_run=10,
+                reasoning_effort="light"
+            )
+
+        ────────────────────────────────────────────────────────
         user_favorite (bool, optionnel)
         ────────────────────────────────────────────────────────
             Ajoute (True) ou retire (False) l'agent des favoris
             de l'utilisateur courant uniquement.
             N'affecte PAS la configuration de l'agent lui-même.
+
+            VALEURS POSSIBLES : True | False
 
         ────────────────────────────────────────────────────────
         skills_json (str, optionnel) — JSON stringifié
@@ -258,25 +305,25 @@ def register(mcp):
 
             FORMAT D'UN OUTIL MCP :
             {
-              "type": "MCP",
+              "type": "MCP",                          ← seule valeur possible
               "name": "Nom affiché de l'outil",
               "description": "Ce que fait cet outil (aide l'agent à décider quand l'utiliser)",
               "configuration": {
-                "url": "https://mon-serveur-mcp.railway.app/sse",
-                "headers": {}
+                "mcp_server_name": "nom_du_serveur",  ← nom exact dans Dust
+                "additional_configuration": {}        ← objet vide si pas de config spécifique
               }
             }
 
-            EXEMPLE — connecter 1 serveur MCP :
+            EXEMPLE — connecter 1 serveur MCP interne Dust :
             update_agent_configuration(
                 agent_sid="7f3a9c2b1e",
                 toolset_json='[{
                   "type": "MCP",
-                  "name": "Mon Serveur MCP",
-                  "description": "Gère les agents Dust via API",
+                  "name": "Web Search",
+                  "description": "Recherche web et navigation",
                   "configuration": {
-                    "url": "https://mon-serveur.railway.app/sse",
-                    "headers": {}
+                    "mcp_server_name": "web_search_&_browse",
+                    "additional_configuration": {}
                   }
                 }]'
             )
@@ -286,9 +333,9 @@ def register(mcp):
             update_agent_configuration(
                 agent_sid="7f3a9c2b1e",
                 toolset_json='[
-                  {"type":"MCP","name":"Outil 1","description":"...","configuration":{"url":"https://outil1.railway.app/sse","headers":{}}},
-                  {"type":"MCP","name":"Outil 2","description":"...","configuration":{"url":"https://outil2.railway.app/sse","headers":{}}},
-                  {"type":"MCP","name":"Nouvel Outil","description":"...","configuration":{"url":"https://nouvel-outil.railway.app/sse","headers":{}}}
+                  {"type":"MCP","name":"Outil 1","description":"...","configuration":{"mcp_server_name":"search","additional_configuration":{}}},
+                  {"type":"MCP","name":"Outil 2","description":"...","configuration":{"mcp_server_name":"web_search_&_browse","additional_configuration":{}}},
+                  {"type":"MCP","name":"Nouvel Outil","description":"...","configuration":{"mcp_server_name":"hubspot","additional_configuration":{}}}
                 ]'
             )
 
@@ -307,12 +354,15 @@ def register(mcp):
             FORMAT ATTENDU (JSON stringifié) :
             '[{"name": "nom-du-tag", "kind": "standard"}]'
 
-            kind peut valoir : "standard" ou "protected"
+            VALEURS POSSIBLES pour "kind" : "standard" | "protected"
+            - "standard"  : tag normal, modifiable par les builders
+            - "protected" : tag verrouillé, non modifiable dans l'UI
 
             EXEMPLE :
             update_agent_configuration(
                 agent_sid="7f3a9c2b1e",
-                tags_json='[{"name": "rh"}, {"name": "production"}]'
+                tags_json='[{"name": "rh", "kind": "standard"},
+                            {"name": "production", "kind": "protected"}]'
             )
 
         ════════════════════════════════════════════════════════
@@ -326,6 +376,15 @@ def register(mcp):
             model_id="gemini-2.5-flash",
             temperature=0.7,
             reasoning_effort="high"
+        )
+
+        # Optimiser un agent simple (moins cher + plus rapide) :
+        update_agent_configuration(
+            agent_sid="7f3a9c2b1e",
+            model_provider_id="anthropic",
+            model_id="claude-haiku-3-5",
+            reasoning_effort="light",
+            max_steps_per_run=10
         )
 
         # Changer uniquement le reasoning_effort sans toucher au reste :
@@ -343,7 +402,7 @@ def register(mcp):
         model, actions, status, scope, tags, skills.
         """
         try:
-            # ── Validation ─────────────────────────────────────────
+            # ── Validation agent_sid ───────────────────────────────
             if not agent_sid or not agent_sid.strip():
                 return json.dumps({
                     "error": "agent_sid est obligatoire.",
@@ -352,18 +411,38 @@ def register(mcp):
                 }, ensure_ascii=False)
 
             # ── Validation reasoning_effort ────────────────────────
-            VALID_REASONING_EFFORTS = {"low", "medium", "high"}
+            # ⚠️ L'API Dust utilise "light", PAS "low".
+            VALID_REASONING_EFFORTS = {"none", "light", "medium", "high"}
             if reasoning_effort is not None:
                 if reasoning_effort not in VALID_REASONING_EFFORTS:
                     return json.dumps({
                         "error": f"reasoning_effort invalide : '{reasoning_effort}'.",
-                        "hint" : "Valeurs acceptées : 'low', 'medium', 'high'."
+                        "hint" : "Valeurs acceptées : 'none', 'light', 'medium', 'high'. "
+                                 "⚠️ Utiliser 'light' (et non 'low') pour le niveau minimal."
+                    }, ensure_ascii=False)
+
+            # ── Validation temperature ─────────────────────────────
+            if temperature is not None:
+                if not isinstance(temperature, (int, float)) or not (0.0 <= temperature <= 1.0):
+                    return json.dumps({
+                        "error": f"temperature doit être un float entre 0.0 et 1.0 "
+                                 f"(reçu : {temperature})"
+                    }, ensure_ascii=False)
+
+            # ── Validation max_steps_per_run ───────────────────────
+            if max_steps_per_run is not None:
+                if not isinstance(max_steps_per_run, int) or not (1 <= max_steps_per_run <= 64):
+                    return json.dumps({
+                        "error": f"max_steps_per_run doit être un entier entre 1 et 64 "
+                                 f"(reçu : {max_steps_per_run}).",
+                        "hint" : "Valeurs recommandées : 5-10 pour un agent simple, "
+                                 "10-30 pour un workflow multi-étapes, 64 = maximum Dust."
                     }, ensure_ascii=False)
 
             # ── Construction du body PATCH ─────────────────────────
             # STRUCTURE CORRECTE : tous les champs sont au niveau RACINE.
-            # L'objet "agent" ne contient QUE les métadonnées
-            # (handle, description, scope, etc.), PAS instructions ni model.
+            # EXCEPTION : max_steps_per_run et visualization_enabled
+            #             sont dans le sous-objet "agent".
 
             body = {}
 
@@ -375,7 +454,14 @@ def register(mcp):
             if instructions is not None:
                 body["instructions"] = instructions
 
-            # 3. generation_settings → racine, clés en snake_case
+            # 3. sous-objet "agent" : métadonnées + max_steps_per_run
+            agent_patch = {}
+            if max_steps_per_run is not None:
+                agent_patch["max_steps_per_run"] = max_steps_per_run
+            if agent_patch:
+                body["agent"] = agent_patch                              # ✅
+
+            # 4. generation_settings → racine, clés en snake_case
             #    Regroupe : provider_id, model_id, temperature, reasoning_effort
             #    ⚠️ Les clés sont snake_case (PAS camelCase).
             generation_settings = {}
@@ -384,19 +470,14 @@ def register(mcp):
             if model_id is not None:
                 generation_settings["model_id"] = model_id              # snake_case ✅
             if temperature is not None:
-                if not (0.0 <= temperature <= 1.0):
-                    return json.dumps({
-                        "error": f"temperature doit être entre 0.0 et 1.0 "
-                                 f"(reçu : {temperature})"
-                    }, ensure_ascii=False)
                 generation_settings["temperature"] = temperature
             if reasoning_effort is not None:
-                generation_settings["reasoning_effort"] = reasoning_effort  # ✅ AJOUTÉ
+                generation_settings["reasoning_effort"] = reasoning_effort
 
             if generation_settings:
                 body["generation_settings"] = generation_settings       # racine ✅
 
-            # 4. skills → racine (PAS dans "agent")
+            # 5. skills → racine (PAS dans "agent")
             #    Chaque skill requiert "sId" ET "name" (tous deux obligatoires).
             if skills_json is not None:
                 try:
@@ -420,7 +501,7 @@ def register(mcp):
                         "hint" : 'Format attendu : \'[{"sId": "abc123", "name": "NomSkill"}]\''
                     }, ensure_ascii=False)
 
-            # 5. toolset → racine (PAS dans "agent")
+            # 6. toolset → racine (PAS dans "agent")
             if toolset_json is not None:
                 try:
                     parsed_toolset = json.loads(toolset_json)
@@ -431,10 +512,11 @@ def register(mcp):
                     return json.dumps({
                         "error": f"toolset_json invalide : {e}",
                         "hint" : 'Format attendu : \'[{"type": "MCP", "name": "...", '
-                                 '"description": "...", "configuration": {"url": "...", "headers": {}}}]\''
+                                 '"description": "...", "configuration": '
+                                 '{"mcp_server_name": "...", "additional_configuration": {}}}]\''
                     }, ensure_ascii=False)
 
-            # 6. tags → racine (PAS dans "agent")
+            # 7. tags → racine (PAS dans "agent")
             if tags_json is not None:
                 try:
                     parsed_tags = json.loads(tags_json)
@@ -445,15 +527,17 @@ def register(mcp):
                     return json.dumps({
                         "error": f"tags_json invalide : {e}",
                         "hint" : 'Format attendu : \'[{"name": "mon-tag", "kind": "standard"}]\''
+                                 " — kind : \"standard\" | \"protected\""
                     }, ensure_ascii=False)
 
-            # 7. Rien à modifier → sortie anticipée
+            # 8. Rien à modifier → sortie anticipée
             if not body:
                 return json.dumps({
                     "error": "Aucun paramètre fourni. Rien à modifier.",
                     "hint" : "Fournis au moins un paramètre parmi : instructions, "
                              "model_provider_id, model_id, temperature, reasoning_effort, "
-                             "user_favorite, skills_json, toolset_json, tags_json."
+                             "max_steps_per_run, user_favorite, skills_json, toolset_json, "
+                             "tags_json."
                 }, ensure_ascii=False)
 
             # ── Appel API ──────────────────────────────────────────
