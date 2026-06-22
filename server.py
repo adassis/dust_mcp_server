@@ -15,7 +15,6 @@ from config import PORT, MCP_BEARER_TOKEN
 # ── Import de chaque tool (1 fichier = 1 tool) ────────────────
 import tools.get_agent_yaml
 import tools.search_agent_by_name
-import tools.list_mcp_server_views
 import tools.list_skills
 import tools.get_conversation
 import tools.export_analytics
@@ -52,7 +51,6 @@ mcp = FastMCP(
 # ── Enregistrement des outils ──────────────────────────────────
 tools.get_agent_yaml.register(mcp)
 tools.search_agent_by_name.register(mcp)
-tools.list_mcp_server_views.register(mcp)
 tools.list_skills.register(mcp)
 tools.get_conversation.register(mcp)
 tools.export_analytics.register(mcp)
