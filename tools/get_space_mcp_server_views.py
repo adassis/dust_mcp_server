@@ -1,32 +1,15 @@
 # =============================================================
 # tools/get_space_mcp_server_views.py
 # =============================================================
-# Tool MCP : liste les serveurs MCP connectés à l'espace Dust
-# principal du workspace.
-#
-# Endpoint : GET /api/v1/w/{wId}/spaces/{spaceId}/mcp_server_views
-#
-# Le spaceId est lu depuis config.DUST_SPACE_ID (variable
-# d'environnement Railway DUST_SPACE_ID, ou valeur par défaut
-# définie dans config.py).
-#
-# Ce tool permet de savoir quels serveurs MCP (remote ou internal)
-# sont activés dans l'espace, avec leurs détails :
-# nom, description, type, outils disponibles, sId, etc.
-#
-# Cas d'usage principal : récupérer le mcpServerViewId d'un outil
-# Dust natif (web search, etc.) pour l'ajouter à un agent via
-# update_agent_configuration ou create_agent_from_yaml.
-# =============================================================
 
 import json
 from utils.dust import dust_get
-from config import DUST_WORKSPACE_ID, DUST_SPACE_ID   # ← DUST_SPACE_ID importé
+from config import DUST_WORKSPACE_ID, DUST_SPACE_ID
 
 def register(mcp):
 
     @mcp.tool()
-    def get_space_mcp_server_views() -> str:             # ← plus de paramètre space_id
+    def get_space_mcp_server_views() -> str:
         """
         Récupère la liste des serveurs MCP connectés à l'espace Dust du workspace.
 
@@ -61,17 +44,15 @@ def register(mcp):
             - updatedAt   : timestamp de dernière modification
         """
         try:
-            # DUST_SPACE_ID vient de config.py (variable d'environnement Railway
-            # ou valeur par défaut "vlt_VZXFm4VFUdvh")
             path = f"/w/{DUST_WORKSPACE_ID}/spaces/{DUST_SPACE_ID}/mcp_server_views"
+            data = dust_get(path)
 
-            data   = dust_get(path)
-            spaces = data.get("spaces", [])
+            server_views = data.get("serverViews", [])   # ✅ CORRIGÉ (était "spaces")
 
             result = {
-                "space_id"         : DUST_SPACE_ID,   # rappel de l'espace interrogé
-                "total_mcp_views"  : len(spaces),
-                "mcp_server_views" : spaces
+                "space_id"         : DUST_SPACE_ID,
+                "total_mcp_views"  : len(server_views),
+                "mcp_server_views" : server_views
             }
 
             return json.dumps(result, ensure_ascii=False, indent=2)
