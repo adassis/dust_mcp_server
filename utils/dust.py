@@ -78,3 +78,48 @@ def dust_get(path: str, params: dict = None) -> dict:
     
     # On convertit la réponse JSON en dict Python et on la retourne
     return r.json()
+
+def dust_post(path: str, body: dict) -> dict:
+    """
+    POST authentifié → envoie un body JSON complet et retourne un dict JSON.
+
+    Utilisé pour la création de ressources (nouveaux agents, etc.).
+    Contrairement à PATCH, POST crée une nouvelle ressource.
+
+    Args:
+        path : chemin de l'endpoint, ex: "/w/abc123/assistant/agent_configurations/import"
+        body : dict Python représentant le body JSON complet à envoyer
+
+    Returns:
+        dict : la réponse JSON de l'API Dust
+
+    Raises:
+        RuntimeError : si credentials manquants, erreur HTTP ou réponse non-dict
+    """
+    _check_credentials()
+
+    headers = {
+        "Authorization": f"Bearer {DUST_API_KEY}",
+        "Content-Type" : "application/json",
+        "Accept"       : "application/json"
+    }
+
+    r = requests.post(
+        BASE_URL + path,
+        headers=headers,
+        json=body,      # requests sérialise automatiquement le dict en JSON
+        timeout=30
+    )
+
+    if not r.ok:
+        raise RuntimeError(f"POST {path} → HTTP {r.status_code}: {r.text[:400]}")
+
+    result = r.json()
+
+    if not isinstance(result, dict):
+        raise RuntimeError(
+            f"POST {path} → Réponse inattendue "
+            f"(type: {type(result).__name__}) : {str(result)[:200]}"
+        )
+
+    return result
