@@ -12,6 +12,9 @@
 # Les champs absents du body restent INCHANGÉS.
 # EXCEPTION : skills et toolset sont des remplacements complets
 # (si tu les envoies, ils écrasent toute la liste existante).
+#
+# ⚠️ BASE_URL dans utils/dust.py = "https://dust.tt/api/v1"
+# → Le path ici commence par /w/ (PAS /api/v1/w/)
 # =============================================================
 
 import json
@@ -237,7 +240,7 @@ def register(mcp):
             )
 
             EXEMPLE — ajouter un outil à un toolset existant de 2 outils :
-            # Supposons que get_agent_yaml retourne déjà 2 outils existants
+            # Récupère d'abord le toolset complet via get_agent_yaml, puis :
             update_agent_configuration(
                 agent_sid="7f3a9c2b1e",
                 toolset_json='[
@@ -402,8 +405,10 @@ def register(mcp):
                 }, ensure_ascii=False)
 
             # ── Appel API ──────────────────────────────────────────
+            # ⚠️ BASE_URL = "https://dust.tt/api/v1" (déjà défini dans utils/dust.py)
+            # → Le path commence par /w/ uniquement, PAS /api/v1/w/
             endpoint = (
-                f"/api/v1/w/{DUST_WORKSPACE_ID}"
+                f"/w/{DUST_WORKSPACE_ID}"                                # ✅ CORRIGÉ
                 f"/assistant/agent_configurations/{agent_sid.strip()}"
             )
             result = dust_patch(endpoint, body)
