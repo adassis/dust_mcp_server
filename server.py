@@ -13,9 +13,7 @@ from starlette.responses import JSONResponse
 from config import PORT, MCP_BEARER_TOKEN
 
 # ── Import de chaque tool (1 fichier = 1 tool) ────────────────
-# ❌ Supprimés : list_agents, get_agent_configuration
-# ✅ Ajouté    : get_agent_yaml
-import tools.get_agent_yaml              
+import tools.get_agent_yaml
 import tools.search_agent_by_name
 import tools.list_mcp_server_views
 import tools.list_skills
@@ -23,7 +21,7 @@ import tools.get_conversation
 import tools.export_analytics
 import tools.get_space_mcp_server_views
 import tools.update_agent_configuration
-import tools.create_agent_from_yaml 
+import tools.create_agent_from_yaml
 
 # ── Initialisation ─────────────────────────────────────────────
 mcp = FastMCP(
@@ -31,23 +29,28 @@ mcp = FastMCP(
     host="0.0.0.0",
     port=PORT,
     instructions=(
-        "Serveur MCP pour interroger l'API Dust. "
+        "Serveur MCP pour interroger et gérer l'API Dust. "
         "TOOLS DISPONIBLES : "
         "1. get_agent_yaml(agent_sid) : exporte la config complète d'un agent au format YAML. "
-        "2. list_agent_configurations(view, variant) : liste tous les agents. "
-        "3. search_agent_by_name(query) : recherche des agents par nom. "
-        "4. list_mcp_server_views() : liste les vues de filtrage disponibles. "
-        "5. list_skills(status) : liste les skills du workspace. "
-        "6. export_analytics(table, start_date, end_date, timezone) : exporte les analytiques. "
-        "7. get_conversation(conversation_id) : récupère une conversation. "
-        "8. get_space_mcp_server_views() : liste les vues MCP server par space. "
-        "WORKFLOW RECOMMANDÉ : list_agent_configurations ou search_agent_by_name "
-        "→ puis get_agent_yaml avec le sId pour la config complète."
+        "2. search_agent_by_name(query) : recherche des agents par nom. "
+        "3. list_mcp_server_views() : liste les vues de filtrage disponibles (all, workspace, published...). "
+        "4. list_skills(status) : liste les skills du workspace. "
+        "5. export_analytics(table, start_date, end_date, timezone) : exporte les analytiques. "
+        "6. get_conversation(conversation_id) : récupère une conversation. "
+        "7. get_space_mcp_server_views() : liste les serveurs MCP de l'espace workspace "   # ← plus de paramètre
+        "(aucun paramètre requis — spaceId configuré dans config.py). "
+        "Retourne les sId (mcpServerViewId) des outils Dust natifs. "
+        "8. update_agent_configuration(agent_sid, ...) : modifie la configuration d'un agent existant "
+        "(instructions, modèle, temperature, reasoning_effort, skills, toolset, tags). "
+        "9. create_agent_from_yaml(yaml_content) : crée un nouvel agent Dust depuis un YAML. "
+        "Utiliser pour créer from scratch ou cloner un agent existant. "
+        "WORKFLOW RECOMMANDÉ : search_agent_by_name → get_agent_yaml → "
+        "update_agent_configuration ou create_agent_from_yaml."
     )
 )
 
 # ── Enregistrement des outils ──────────────────────────────────
-tools.get_agent_yaml.register(mcp)            
+tools.get_agent_yaml.register(mcp)
 tools.search_agent_by_name.register(mcp)
 tools.list_mcp_server_views.register(mcp)
 tools.list_skills.register(mcp)
