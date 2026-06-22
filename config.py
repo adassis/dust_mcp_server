@@ -30,4 +30,4 @@ DUST_WORKSPACE_ID = os.environ.get("DUST_WORKSPACE_ID", "")
 # Visible dans l'URL : dust.tt/w/WORKSPACE/spaces/SPACE_ID
 # Utilisé par get_space_mcp_server_views pour lister les serveurs MCP
 # disponibles dans cet espace sans avoir à le passer en paramètre
-DUST_SPACE_ID = os.environ.get("DUST_SPACE_ID", "vlt_VZXFm4VFUdvh") 
+DUST_SPACE_ID = os.environ.get("DUST_SPACE_ID", "vlt_uE21YZ40FqnG") 
