@@ -28,7 +28,10 @@ def _check_credentials():
             "Vérifiez vos variables d'environnement sur Railway."
         )
 
-def dust_get(path: str, params: dict = None) -> dict:
+# ✅ FIX : le type de retour passe de "-> dict" à "-> dict | list"
+# car l'API Dust retourne une liste [] pour certains endpoints
+# (ex: /analytics/export?table=messages retourne un tableau de messages)
+def dust_get(path: str, params: dict = None) -> dict | list:
     """
     Effectue un GET authentifié vers l'API Dust.
 
@@ -37,11 +40,12 @@ def dust_get(path: str, params: dict = None) -> dict:
         params : paramètres query string optionnels, ex: {"variant": "light"}
 
     Returns:
-        dict : le corps JSON complet de la réponse Dust
+        dict ou list : le corps JSON complet de la réponse Dust
+        (dict pour la majorité des endpoints, list pour analytics/export?table=messages)
 
     Raises:
         RuntimeError : si credentials manquants, si l'API retourne une erreur HTTP,
-                       ou si la réponse n'est pas un dictionnaire JSON
+                       ou si la réponse n'est ni un dict ni une list
     """
     # On vérifie d'abord que les credentials sont bien présents
     _check_credentials()
@@ -62,20 +66,20 @@ def dust_get(path: str, params: dict = None) -> dict:
     if not r.ok:
         raise RuntimeError(f"GET {path} → HTTP {r.status_code}: {r.text[:400]}")
 
-    # On convertit la réponse JSON en dict Python
+    # On convertit la réponse JSON en dict ou list Python
     result = r.json()
 
-    # ✅ FIX : guard de type — l'API Dust doit toujours retourner un objet JSON {}
-    # Si on reçoit une string, une liste ou autre chose, on lève une erreur lisible
-    # au lieu de laisser crasher avec "'str' object has no attribute 'get'"
-    if not isinstance(result, dict):
+    # ✅ FIX : guard de type étendu — on accepte maintenant dict {} ET list []
+    # Avant : isinstance(result, dict)  → rejetait les listes (ex: table=messages)
+    # Après : isinstance(result, (dict, list)) → accepte les deux formats
+    # On rejette uniquement les types vraiment inattendus (str, int, None, etc.)
+    if not isinstance(result, (dict, list)):
         raise RuntimeError(
             f"GET {path} → Réponse JSON inattendue "
             f"(type reçu : {type(result).__name__}) : {str(result)[:200]}"
         )
 
     return result
-
 
 def dust_get_text(path: str, accept: str = "text/plain", params: dict = None) -> str:
     """
@@ -99,7 +103,7 @@ def dust_get_text(path: str, accept: str = "text/plain", params: dict = None) ->
 
     headers = {
         "Authorization": f"Bearer {DUST_API_KEY}",
-        "Accept"       : accept    # "text/yaml" pour l'export YAML
+        "Accept": accept  # "text/yaml" pour l'export YAML
     }
 
     r = requests.get(
@@ -136,14 +140,14 @@ def dust_patch(path: str, body: dict) -> dict:
 
     headers = {
         "Authorization": f"Bearer {DUST_API_KEY}",
-        "Content-Type" : "application/json",
-        "Accept"       : "application/json"
+        "Content-Type": "application/json",
+        "Accept": "application/json"
     }
 
     r = requests.patch(
         BASE_URL + path,
         headers=headers,
-        json=body,       # requests sérialise automatiquement le dict en JSON
+        json=body,  # requests sérialise automatiquement le dict en JSON
         timeout=30
     )
 
@@ -159,6 +163,7 @@ def dust_patch(path: str, body: dict) -> dict:
         )
 
     return result
+
 def dust_post(path: str, body: dict) -> dict:
     """
     POST authentifié → envoie un body JSON complet et retourne un dict JSON.
@@ -180,14 +185,14 @@ def dust_post(path: str, body: dict) -> dict:
 
     headers = {
         "Authorization": f"Bearer {DUST_API_KEY}",
-        "Content-Type" : "application/json",
-        "Accept"       : "application/json"
+        "Content-Type": "application/json",
+        "Accept": "application/json"
     }
 
     r = requests.post(
         BASE_URL + path,
         headers=headers,
-        json=body,      # requests sérialise automatiquement le dict en JSON
+        json=body,  # requests sérialise automatiquement le dict en JSON
         timeout=30
     )
 
