@@ -5,14 +5,14 @@
 # Endpoint : GET /api/v1/w/{wId}/analytics/export
 # Doc : https://docs.dust.tt/reference/get_api-v1-w-wid-analytics-export
 #
-# ⚠️  PRÉREQUIS : ta clé API Dust doit avoir le scope "admin"
-#     (une clé normale retourne HTTP 403)
-#     → Dust > Settings > API Keys > créer une clé avec scope admin
+# ⚠️ PRÉREQUIS : ta clé API Dust doit avoir le scope "admin"
+# (une clé normale retourne HTTP 403)
+# → Dust > Settings > API Keys > créer une clé avec scope admin
 # =============================================================
 
-import json                        # Pour formater la réponse en texte JSON lisible
-from typing import Optional        # Pour déclarer des paramètres optionnels avec type hint
-from utils.dust import dust_get    # Client HTTP centralisé (gère auth + erreurs)
+import json        # Pour formater la réponse en texte JSON lisible
+from typing import Optional  # Pour déclarer des paramètres optionnels avec type hint
+from utils.dust import dust_get       # Client HTTP centralisé (gère auth + erreurs)
 from config import DUST_WORKSPACE_ID  # ID du workspace, lu depuis les variables d'environnement
 
 def register(mcp):
@@ -35,26 +35,28 @@ def register(mcp):
         nombre de messages, utilisateurs actifs, agents les plus utilisés,
         détail des conversations, etc.
 
-        ⚠️  Nécessite une clé API Dust avec le scope "admin".
+        ⚠️ Nécessite une clé API Dust avec le scope "admin".
 
         Args:
             table : Le type de données à exporter. Valeurs possibles :
-                - "usage_metrics"  : Messages, conversations et utilisateurs actifs dans le temps
-                - "active_users"   : Compteurs d'utilisateurs actifs (jour / semaine / mois)
-                - "source"         : Volume de messages par origine (web, Slack, API, etc.)
-                - "agents"         : Top agents classés par nombre de messages reçus
-                - "users"          : Top utilisateurs classés par nombre de messages envoyés
-                - "skill_usage"    : Exécutions de skills et utilisateurs uniques dans le temps
-                - "tool_usage"     : Exécutions de tools et utilisateurs uniques dans le temps
-                - "messages"       : Logs détaillés message par message
+                - "usage_metrics" : Messages, conversations et utilisateurs actifs dans le temps
+                - "active_users"  : Compteurs d'utilisateurs actifs (jour / semaine / mois)
+                - "source"        : Volume de messages par origine (web, Slack, API, etc.)
+                - "agents"        : Top agents classés par nombre de messages reçus
+                - "users"         : Top utilisateurs classés par nombre de messages envoyés
+                - "skills"        : Catalogue des skills disponibles
+                - "skill_usage"   : Exécutions de skills et utilisateurs uniques dans le temps
+                - "tool_usage"    : Exécutions de tools et utilisateurs uniques dans le temps
+                - "messages"      : Logs détaillés message par message
+                - "feedback"      : Feedbacks détaillés (pouces, contenu, URL conversation)
 
             start_date : Date de début au format YYYY-MM-DD (ex: "2025-01-01")
 
-            end_date : Date de fin au format YYYY-MM-DD (ex: "2025-12-31")
+            end_date   : Date de fin au format YYYY-MM-DD (ex: "2025-12-31")
 
-            timezone : (optionnel) Nom de timezone IANA pour interpréter les dates.
-                       Ex: "Europe/Brussels", "America/New_York"
-                       Si non fourni, UTC est utilisé par défaut.
+            timezone   : (optionnel) Nom de timezone IANA pour interpréter les dates.
+                         Ex: "Europe/Brussels", "America/New_York"
+                         Si non fourni, UTC est utilisé par défaut.
 
         Returns:
             JSON contenant les données analytiques demandées.
@@ -64,15 +66,18 @@ def register(mcp):
         # ── Validation du paramètre 'table' ──────────────────────────────────
         # L'API Dust retournerait une erreur 400 si la valeur est invalide.
         # On préfère donner un message clair à l'agent plutôt qu'une erreur HTTP cryptique.
+        # ✅ FIX : on ajoute "skills" et "feedback" qui existent dans l'API Dust
         VALID_TABLES = [
             "usage_metrics",
             "active_users",
             "source",
             "agents",
             "users",
+            "skills",       # ← ajouté : catalogue des skills
             "skill_usage",
             "tool_usage",
             "messages",
+            "feedback",     # ← ajouté : feedbacks utilisateurs
         ]
         if table not in VALID_TABLES:
             return json.dumps({
@@ -101,11 +106,11 @@ def register(mcp):
             # On passe obligatoirement : table, startDate, endDate, format
             # On ajoute timezone uniquement s'il a été fourni
             params = {
-                "table": table,              # Quel type de données exporter
-                "startDate": start_date,     # Format attendu par l'API : YYYY-MM-DD
-                "endDate": end_date,         # Format attendu par l'API : YYYY-MM-DD
-                "format": "json",            # On force JSON pour rester compatible avec dust_get()
-                                             # (dust_get appelle r.json() en fin de chaîne)
+                "table":     table,       # Quel type de données exporter
+                "startDate": start_date,  # Format attendu par l'API : YYYY-MM-DD
+                "endDate":   end_date,    # Format attendu par l'API : YYYY-MM-DD
+                "format":    "json",      # On force JSON pour rester compatible avec dust_get()
+                                          # (dust_get appelle r.json() en fin de chaîne)
             }
 
             # On ajoute timezone seulement s'il a été fourni (sinon l'API utilise UTC)
@@ -114,22 +119,45 @@ def register(mcp):
 
             # ── Appel à l'API Dust ─────────────────────────────────────────────
             # dust_get() va :
-            #   1. Vérifier que DUST_API_KEY et DUST_WORKSPACE_ID sont bien définis
-            #   2. Ajouter le header "Authorization: Bearer DUST_API_KEY"
-            #   3. Faire le GET https://dust.tt/api/v1/w/{wId}/analytics/export?...
-            #   4. Vérifier que la réponse HTTP est 2xx (sinon lever une RuntimeError)
-            #   5. Retourner le corps JSON converti en dict Python
+            # 1. Vérifier que DUST_API_KEY et DUST_WORKSPACE_ID sont bien définis
+            # 2. Ajouter le header "Authorization: Bearer DUST_API_KEY"
+            # 3. Faire le GET https://dust.tt/api/v1/w/{wId}/analytics/export?...
+            # 4. Vérifier que la réponse HTTP est 2xx (sinon lever une RuntimeError)
+            # 5. Retourner le corps JSON converti en dict OU list Python
             data = dust_get(path, params=params)
 
             # ── Enrichissement de la réponse ───────────────────────────────────
-            # On ajoute les paramètres utilisés pour faciliter la lecture du résultat
-            result = {
-                "table": table,
-                "start_date": start_date,
-                "end_date": end_date,
-                "timezone": timezone or "UTC",
-                "data": data  # Les données brutes retournées par l'API Dust
-            }
+            # ✅ FIX : l'API Dust retourne deux formats selon la table :
+            #
+            #   - list []  pour "messages" (et potentiellement "feedback") :
+            #     tableau de lignes de logs, une entrée par message
+            #     ex: [{"messageId": "...", "createdAt": "...", ...}, ...]
+            #
+            #   - dict {}  pour toutes les autres tables :
+            #     objet JSON avec des clés décrivant les données agrégées
+            #
+            # On détecte le type reçu et on adapte l'enrobage en conséquence.
+
+            if isinstance(data, list):
+                # Cas liste : on emballe dans un objet propre
+                # avec le nombre de lignes retournées (utile pour l'agent)
+                result = {
+                    "table":      table,
+                    "start_date": start_date,
+                    "end_date":   end_date,
+                    "timezone":   timezone or "UTC",
+                    "count":      len(data),  # ← nombre de lignes, pratique pour l'agent
+                    "data":       data        # ← le tableau brut retourné par l'API
+                }
+            else:
+                # Cas dict : comportement d'origine — on enrobe avec les métadonnées
+                result = {
+                    "table":      table,
+                    "start_date": start_date,
+                    "end_date":   end_date,
+                    "timezone":   timezone or "UTC",
+                    "data":       data  # Les données brutes retournées par l'API Dust
+                }
 
             # Conversion en texte JSON formaté et lisible par l'agent
             return json.dumps(result, ensure_ascii=False, indent=2)
@@ -148,12 +176,12 @@ def register(mcp):
                 )
 
             return json.dumps({
-                "error": error_msg,
-                "aide": aide,
+                "error":              error_msg,
+                "aide":               aide,
                 "parametres_utilises": {
-                    "table": table,
+                    "table":      table,
                     "start_date": start_date,
-                    "end_date": end_date,
-                    "timezone": timezone
+                    "end_date":   end_date,
+                    "timezone":   timezone
                 }
             }, ensure_ascii=False, indent=2)
