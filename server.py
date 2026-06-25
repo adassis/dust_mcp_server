@@ -21,6 +21,7 @@ import tools.export_analytics
 import tools.get_space_mcp_server_views
 import tools.update_agent_configuration
 import tools.create_agent_from_yaml
+import tools.add_mcp_server_to_agent
 
 # ── Initialisation ─────────────────────────────────────────────
 mcp = FastMCP(
@@ -36,15 +37,20 @@ mcp = FastMCP(
         "4. list_skills(status) : liste les skills du workspace. "
         "5. export_analytics(table, start_date, end_date, timezone) : exporte les analytiques. "
         "6. get_conversation(conversation_id) : récupère une conversation. "
-        "7. get_space_mcp_server_views() : liste les serveurs MCP de l'espace workspace "   # ← plus de paramètre
+        "7. get_space_mcp_server_views() : liste les serveurs MCP de l'espace workspace "
         "(aucun paramètre requis — spaceId configuré dans config.py). "
         "Retourne les sId (mcpServerViewId) des outils Dust natifs. "
         "8. update_agent_configuration(agent_sid, ...) : modifie la configuration d'un agent existant "
         "(instructions, modèle, temperature, reasoning_effort, skills, toolset, tags). "
+        "LIMITE : toolset_json ne supporte que les serveurs MCP internes. "
+        "Pour les serveurs remote, utiliser add_mcp_server_to_agent. "
         "9. create_agent_from_yaml(yaml_content) : crée un nouvel agent Dust depuis un YAML. "
         "Utiliser pour créer from scratch ou cloner un agent existant. "
+        "10. add_mcp_server_to_agent(agent_sid, mcp_server_view_id, ...) : "
+        "ajoute un serveur MCP remote OU interne à un agent via la route privée Dust. "
+        "Utiliser quand update_agent_configuration échoue sur un serveur remote (ex: Aircall). "
         "WORKFLOW RECOMMANDÉ : search_agent_by_name → get_agent_yaml → "
-        "update_agent_configuration ou create_agent_from_yaml."
+        "update_agent_configuration ou add_mcp_server_to_agent ou create_agent_from_yaml."
     )
 )
 
@@ -57,6 +63,7 @@ tools.export_analytics.register(mcp)
 tools.get_space_mcp_server_views.register(mcp)
 tools.update_agent_configuration.register(mcp)
 tools.create_agent_from_yaml.register(mcp)
+tools.add_mcp_server_to_agent.register(mcp)
 
 # ── Middleware d'authentification ──────────────────────────────
 class BearerAuthMiddleware(BaseHTTPMiddleware):
