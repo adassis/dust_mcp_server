@@ -208,3 +208,69 @@ def dust_post(path: str, body: dict) -> dict:
         )
 
     return result
+
+# ─── Routes privées (/api/w/... sans /v1) ─────────────────────
+PRIVATE_BASE_URL = "https://dust.tt/api"
+
+def dust_get_private(path: str, params: dict = None) -> dict | list:
+    """
+    GET authentifié vers la route PRIVÉE Dust (/api/w/... sans /v1/).
+    Utilisé pour récupérer les agents avec variant=full (actions incluses).
+    """
+    _check_credentials()
+
+    headers = {
+        "Authorization": f"Bearer {DUST_API_KEY}",
+        "Accept": "application/json"
+    }
+
+    r = requests.get(
+        PRIVATE_BASE_URL + path,
+        headers=headers,
+        params=params or {},
+        timeout=30
+    )
+
+    if not r.ok:
+        raise RuntimeError(f"GET (private) {path} → HTTP {r.status_code}: {r.text[:400]}")
+
+    result = r.json()
+    if not isinstance(result, (dict, list)):
+        raise RuntimeError(
+            f"GET (private) {path} → Réponse inattendue "
+            f"(type: {type(result).__name__}): {str(result)[:200]}"
+        )
+    return result
+
+
+def dust_patch_private(path: str, body: dict) -> dict:
+    """
+    PATCH authentifié vers la route PRIVÉE Dust (/api/w/... sans /v1/).
+    Accepte mcpServerViewId directement (contrairement à la route publique v1
+    qui ne supporte que les serveurs MCP internes via toolset/mcp_server_name).
+    """
+    _check_credentials()
+
+    headers = {
+        "Authorization": f"Bearer {DUST_API_KEY}",
+        "Content-Type": "application/json",
+        "Accept": "application/json"
+    }
+
+    r = requests.patch(
+        PRIVATE_BASE_URL + path,
+        headers=headers,
+        json=body,
+        timeout=30
+    )
+
+    if not r.ok:
+        raise RuntimeError(f"PATCH (private) {path} → HTTP {r.status_code}: {r.text[:400]}")
+
+    result = r.json()
+    if not isinstance(result, dict):
+        raise RuntimeError(
+            f"PATCH (private) {path} → Réponse inattendue "
+            f"(type: {type(result).__name__}): {str(result)[:200]}"
+        )
+    return result
