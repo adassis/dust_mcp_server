@@ -22,6 +22,7 @@ import tools.get_space_mcp_server_views
 import tools.update_agent_configuration
 import tools.create_agent_from_yaml
 import tools.add_mcp_server_to_agent
+import tools.list_agent_configurations
 
 # ── Initialisation ─────────────────────────────────────────────
 mcp = FastMCP(
@@ -51,6 +52,8 @@ mcp = FastMCP(
         "Utiliser quand update_agent_configuration échoue sur un serveur remote (ex: Aircall). "
         "WORKFLOW RECOMMANDÉ : search_agent_by_name → get_agent_yaml → "
         "update_agent_configuration ou add_mcp_server_to_agent ou create_agent_from_yaml."
+        "11. list_agent_configurations(view, with_authors) : liste toutes les configurations d'agents du workspace. "
+        "Paramètre view : all (défaut), list, workspace, published, global, favorites. "
     )
 )
 
@@ -64,6 +67,7 @@ tools.get_space_mcp_server_views.register(mcp)
 tools.update_agent_configuration.register(mcp)
 tools.create_agent_from_yaml.register(mcp)
 tools.add_mcp_server_to_agent.register(mcp)
+tools.list_agent_configurations.register(mcp)
 
 # ── Middleware d'authentification ──────────────────────────────
 class BearerAuthMiddleware(BaseHTTPMiddleware):
